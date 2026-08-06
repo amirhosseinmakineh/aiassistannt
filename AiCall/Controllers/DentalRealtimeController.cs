@@ -23,7 +23,9 @@ public sealed class DentalRealtimeController(
             return;
         }
 
+        logger.LogInformation("Browser websocket request received");
         using var browser = await HttpContext.WebSockets.AcceptWebSocketAsync();
+        logger.LogInformation("Browser websocket accepted");
         await using var openAi = sessionFactory.CreateSession();
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
         using var browserSendLock = new SemaphoreSlim(1, 1);
@@ -42,7 +44,8 @@ public sealed class DentalRealtimeController(
         {
             await SendJsonAsync(new { type = "status", message = "WebSocket connected; creating OpenAI session." });
             await openAi.ConnectAsync(lifetime.Token);
-            await ReceiveBrowserMessagesAsync(browser, openAi, SendJsonAsync, lifetime.Token);
+            logger.LogInformation("OpenAI session connected");
+            await ReceiveBrowserMessagesAsync(browser, openAi, SendJsonAsync, logger, lifetime.Token);
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception ex)
@@ -69,6 +72,7 @@ public sealed class DentalRealtimeController(
         WebSocket browser,
         IOpenAiRealtimeSession openAi,
         Func<object, Task> sendJsonAsync,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(8 * 1024);
@@ -110,7 +114,9 @@ public sealed class DentalRealtimeController(
                     continue;
                 }
 
-                await openAi.SendTextMessageAsync(request.Message.Trim(), cancellationToken);
+                var browserMessage = request.Message.Trim();
+                logger.LogInformation("Browser message received: {Message}", browserMessage);
+                await openAi.SendTextMessageAsync(browserMessage, cancellationToken);
             }
         }
         finally { ArrayPool<byte>.Shared.Return(buffer); }

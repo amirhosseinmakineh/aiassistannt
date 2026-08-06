@@ -24,10 +24,12 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.Configure<AiAssistant.ApplicationService.Contract.Options.OpenAiRealtimeOptions>(
     builder.Configuration.GetSection("OpenAi"));
-builder.Services.AddSingleton<IOpenAiRealtimeSessionFactory, OpenAiRealtimeSessionFactory>();
+builder.Services.AddTransient<IOpenAiRealtimeSessionFactory, OpenAiRealtimeSessionFactory>();
 
 
 var app = builder.Build();
+
+app.Logger.LogInformation("Starting Dental Realtime API");
 
 
 app.UseWebSockets(new WebSocketOptions

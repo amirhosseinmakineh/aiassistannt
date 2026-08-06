@@ -12,7 +12,7 @@ dotnet user-secrets set "OpenAi:ApiKey" "YOUR_KEY" --project AiCall
 dotnet run --project AiCall
 ```
 
-Open the printed HTTP or HTTPS URL, click **اتصال**, and send the pre-filled `سلام از مرورگر` message. Configuration for the model, endpoint, voice, instructions, and output sample rate is in `AiCall/appsettings.json`.
+Open `https://localhost:7250`, click **اتصال**, and send the pre-filled `سلام از مرورگر` message. Configuration for the `gpt-realtime-2.1` model, endpoint, voice, instructions, and output sample rate is in `AiCall/appsettings.json`.
 
 ## Browser protocol
 

@@ -45,12 +45,14 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
             : $"{uriBuilder.Query.TrimStart('?')}&model={model}";
 
         _socket.Options.SetRequestHeader("Authorization", $"Bearer {_options.ApiKey}");
+        _logger.LogInformation("Connecting to OpenAI Realtime");
         await _socket.ConnectAsync(uriBuilder.Uri, cancellationToken);
         _logger.LogInformation("Connected to OpenAI Realtime");
 
         var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
         _receiveTask = ReceiveLoopAsync(linked);
         await SendSessionUpdateAsync(cancellationToken);
+        _logger.LogInformation("Session update sent");
     }
 
     public async Task<bool> SendTextMessageAsync(string text, CancellationToken cancellationToken)
@@ -66,6 +68,7 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
 
         try
         {
+            _logger.LogInformation("Sending message to OpenAI");
             await SendJsonAsync(new
             {
                 type = "conversation.item.create",

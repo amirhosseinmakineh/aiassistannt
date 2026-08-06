@@ -35,6 +35,8 @@ public sealed class DentalRealtimeController(
             browserSendLock, lifetime.Token);
 
         openAi.TranscriptDeltaReceived += delta => SendJsonAsync(new { type = "transcript.delta", delta });
+        openAi.InputTranscriptDeltaReceived += delta => SendJsonAsync(new { type = "input_transcript.delta", delta });
+        openAi.InputTranscriptCompleted += transcript => SendJsonAsync(new { type = "input_transcript.done", transcript });
         openAi.AudioReceived += audio => SendBrowserAsync(
             browser, audio, WebSocketMessageType.Binary, browserSendLock, lifetime.Token);
         openAi.StatusReceived += message => SendJsonAsync(new { type = "status", message });
@@ -94,17 +96,26 @@ public sealed class DentalRealtimeController(
                     }
                 } while (!result.EndOfMessage);
 
-                if (result.MessageType != WebSocketMessageType.Text)
+                if (result.MessageType == WebSocketMessageType.Binary)
                 {
-                    await sendJsonAsync(new { type = "error", message = "Only text request frames are supported." });
+                    await openAi.SendAudioAsync(message.ToArray(), cancellationToken);
                     continue;
                 }
+
+                if (result.MessageType != WebSocketMessageType.Text) continue;
 
                 BrowserMessage? request;
                 try { request = JsonSerializer.Deserialize<BrowserMessage>(message.ToArray(), JsonOptions); }
                 catch (JsonException)
                 {
                     await sendJsonAsync(new { type = "error", message = "Invalid JSON message." });
+                    continue;
+                }
+
+                if (request?.Type == "audio.commit")
+                {
+                    logger.LogInformation("Browser audio recording received");
+                    await openAi.CommitAudioAsync(cancellationToken);
                     continue;
                 }
 
@@ -139,5 +150,5 @@ public sealed class DentalRealtimeController(
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-    private sealed record BrowserMessage(string Type, string Message);
+    private sealed record BrowserMessage(string Type, string? Message);
 }

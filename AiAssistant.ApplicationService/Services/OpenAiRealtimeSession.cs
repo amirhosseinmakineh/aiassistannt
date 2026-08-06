@@ -21,6 +21,8 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
     private int _disposed;
 
     public event Func<string, Task>? TranscriptDeltaReceived;
+    public event Func<string, Task>? InputTranscriptDeltaReceived;
+    public event Func<string, Task>? InputTranscriptCompleted;
     public event Func<ReadOnlyMemory<byte>, Task>? AudioReceived;
     public event Func<string, Task>? StatusReceived;
     public event Func<string, Task>? ErrorReceived;
@@ -94,6 +96,43 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
         }
     }
 
+    public Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken cancellationToken)
+    {
+        if (pcm16Audio.IsEmpty) return Task.CompletedTask;
+        return SendJsonAsync(new
+        {
+            type = "input_audio_buffer.append",
+            audio = Convert.ToBase64String(pcm16Audio.Span)
+        }, cancellationToken);
+    }
+
+    public async Task<bool> CommitAudioAsync(CancellationToken cancellationToken)
+    {
+        if (Interlocked.CompareExchange(ref _responseInProgress, 1, 0) != 0)
+        {
+            await InvokeAsync(StatusReceived, "A response is already in progress. Please wait.");
+            return false;
+        }
+
+        try
+        {
+            _logger.LogInformation("Committing browser audio to OpenAI");
+            await SendJsonAsync(new { type = "input_audio_buffer.commit" }, cancellationToken);
+            await SendJsonAsync(new
+            {
+                type = "response.create",
+                response = new { output_modalities = new[] { "audio" } }
+            }, cancellationToken);
+            await InvokeAsync(StatusReceived, "Audio sent; response requested.");
+            return true;
+        }
+        catch
+        {
+            Interlocked.Exchange(ref _responseInProgress, 0);
+            throw;
+        }
+    }
+
     private Task SendSessionUpdateAsync(CancellationToken cancellationToken) => SendJsonAsync(new
     {
         type = "session.update",
@@ -103,6 +142,12 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
             instructions = _options.Instructions,
             audio = new
             {
+                input = new
+                {
+                    format = new { type = "audio/pcm", rate = _options.OutputSampleRate },
+                    transcription = new { model = _options.InputTranscriptionModel },
+                    turn_detection = (object?)null
+                },
                 output = new
                 {
                     format = new { type = "audio/pcm", rate = _options.OutputSampleRate },
@@ -193,6 +238,18 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
             case "response.output_audio_transcript.delta":
                 if (root.TryGetProperty("delta", out var transcriptDelta))
                     await InvokeAsync(TranscriptDeltaReceived, transcriptDelta.GetString() ?? string.Empty);
+                break;
+            case "conversation.item.input_audio_transcription.delta":
+                if (root.TryGetProperty("delta", out var inputTranscriptDelta))
+                    await InvokeAsync(InputTranscriptDeltaReceived, inputTranscriptDelta.GetString() ?? string.Empty);
+                break;
+            case "conversation.item.input_audio_transcription.completed":
+                if (root.TryGetProperty("transcript", out var inputTranscript))
+                    await InvokeAsync(InputTranscriptCompleted, inputTranscript.GetString() ?? string.Empty);
+                await InvokeAsync(StatusReceived, "Voice transcription completed.");
+                break;
+            case "conversation.item.input_audio_transcription.failed":
+                await InvokeAsync(ErrorReceived, "Voice transcription failed.");
                 break;
             case "response.output_audio_transcript.done":
                 await InvokeAsync(StatusReceived, "Transcript completed.");

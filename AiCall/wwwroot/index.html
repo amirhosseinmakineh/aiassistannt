@@ -10,7 +10,7 @@
     main { width:min(760px,100%); background:#101e31; border:1px solid #29405e; border-radius:22px; padding:28px; box-shadow:0 24px 70px #0008 }
     h1 { margin:0 0 6px; font-size:clamp(1.5rem,5vw,2.3rem) } .subtitle { color:#9bb0ca; margin:0 0 24px }
     .state { padding:12px 14px; border-radius:10px; background:#182a42; margin-bottom:18px } .state[data-live=true] { color:#75e5af; background:#123629 }
-    .controls,.composer { display:flex; gap:10px; margin-bottom:18px } button,input { border-radius:10px; border:1px solid #385374; padding:12px 16px; font:inherit }
+    .controls,.composer { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px } button,input { border-radius:10px; border:1px solid #385374; padding:12px 16px; font:inherit }
     button { cursor:pointer; background:#2076df; color:white; font-weight:700 } button.secondary { background:#263a54 } button:disabled { opacity:.45; cursor:not-allowed }
     input { flex:1; min-width:0; background:#0b1727; color:white } section { background:#0b1727; border-radius:12px; padding:16px; margin-top:14px }
     h2 { font-size:.85rem; color:#8da5c1; margin:0 0 10px; text-transform:uppercase } #transcript { min-height:70px; white-space:pre-wrap; font-size:1.1rem; line-height:1.8 }
@@ -27,12 +27,14 @@
   <div class="controls">
     <button id="connect">اتصال</button>
     <button id="disconnect" class="secondary" disabled>قطع اتصال</button>
+    <button id="record" class="secondary" disabled>شروع صحبت</button>
   </div>
   <form id="composer" class="composer">
     <input id="message" value="سلام از مرورگر" aria-label="پیام" autocomplete="off">
     <button id="send" disabled>ارسال</button>
   </form>
   <section><h2>متن پاسخ</h2><div id="transcript">هنوز پاسخی دریافت نشده است.</div></section>
+  <section><h2>متن صدای شما</h2><div id="inputTranscript">هنوز صدایی ارسال نشده است.</div></section>
   <section id="error" role="alert"></section>
   <section><h2>رویدادها</h2><div id="events"></div></section>
 </main>
@@ -41,9 +43,11 @@
   'use strict';
   const RATE = 24000;
   const $ = id => document.getElementById(id);
-  const connectButton=$('connect'), disconnectButton=$('disconnect'), sendButton=$('send');
-  const state=$('state'), transcript=$('transcript'), events=$('events'), error=$('error'), message=$('message');
-  let socket=null, audioContext=null, nextStartTime=0, transcriptText='';
+  const connectButton=$('connect'), disconnectButton=$('disconnect'), sendButton=$('send'), recordButton=$('record');
+  const state=$('state'), transcript=$('transcript'), inputTranscript=$('inputTranscript'), events=$('events'), error=$('error'), message=$('message');
+  let socket=null, audioContext=null, nextStartTime=0, transcriptText='', inputTranscriptText='';
+  let mediaStream=null, microphoneSource=null, recorderNode=null, silentGain=null, recordedBytes=0;
+  let recorderModulePromise=null;
 
   function log(text) {
     const line=document.createElement('div'); line.textContent=`${new Date().toLocaleTimeString()}  ${text}`;
@@ -56,6 +60,7 @@
     connectButton.disabled=live || connecting;
     disconnectButton.disabled=!live;
     sendButton.disabled=!live;
+    recordButton.disabled=!live;
   }
   function showError(text) { error.textContent=text; error.classList.toggle('visible', Boolean(text)); }
   async function prepareAudio() {
@@ -79,6 +84,10 @@
       if (!transcriptText) transcript.textContent=''; transcriptText+=event.delta || ''; transcript.textContent=transcriptText;
     } else if (event.type==='status') {
       log(event.message); if (event.message.includes('response started')) { transcriptText=''; transcript.textContent=''; }
+    } else if (event.type==='input_transcript.delta') {
+      inputTranscriptText+=event.delta || ''; inputTranscript.textContent=inputTranscriptText;
+    } else if (event.type==='input_transcript.done') {
+      inputTranscriptText=event.transcript || inputTranscriptText; inputTranscript.textContent=inputTranscriptText;
     } else if (event.type==='error') { showError(event.message || 'خطای ناشناخته'); log(`ERROR: ${event.message}`); }
   }
   async function connect() {
@@ -95,11 +104,41 @@
       if (socket!==currentSocket) return;
       setConnectionState('disconnected');
       const detail=event.reason ? `: ${event.reason}` : '';
-      log(`WebSocket closed (${event.code})${detail}`); socket=null; nextStartTime=0;
+      stopRecording(false); log(`WebSocket closed (${event.code})${detail}`); socket=null; nextStartTime=0;
     };
+  }
+  async function startRecording() {
+    if (socket?.readyState!==WebSocket.OPEN || mediaStream) return;
+    showError(''); await prepareAudio();
+    mediaStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    recorderModulePromise ||= audioContext.audioWorklet.addModule('/pcm-recorder-worklet.js');
+    await recorderModulePromise;
+    microphoneSource=audioContext.createMediaStreamSource(mediaStream);
+    recorderNode=new AudioWorkletNode(audioContext,'pcm16-recorder');
+    silentGain=audioContext.createGain(); silentGain.gain.value=0;
+    recorderNode.port.onmessage=event=>{
+      if (event.data instanceof ArrayBuffer && socket?.readyState===WebSocket.OPEN) {
+        recordedBytes+=event.data.byteLength; socket.send(event.data);
+      }
+    };
+    microphoneSource.connect(recorderNode); recorderNode.connect(silentGain); silentGain.connect(audioContext.destination);
+    recordedBytes=0; inputTranscriptText=''; inputTranscript.textContent='در حال شنیدن…';
+    recordButton.textContent='پایان صحبت و ارسال'; recordButton.classList.remove('secondary'); log('Microphone recording started');
+  }
+  function stopRecording(commit=true) {
+    if (!mediaStream) return;
+    microphoneSource?.disconnect(); recorderNode?.disconnect(); silentGain?.disconnect();
+    mediaStream.getTracks().forEach(track=>track.stop());
+    mediaStream=null; microphoneSource=null; recorderNode=null; silentGain=null;
+    recordButton.textContent='شروع صحبت'; recordButton.classList.add('secondary');
+    if (commit && socket?.readyState===WebSocket.OPEN) {
+      if (recordedBytes>=4800) { socket.send(JSON.stringify({type:'audio.commit'})); log('Voice recording sent'); }
+      else showError('صدای ضبط‌شده خیلی کوتاه بود؛ حداقل یک لحظه صحبت کنید.');
+    }
   }
   connectButton.onclick=()=>connect().catch(e=>showError(e.message));
   disconnectButton.onclick=()=>socket?.close(1000,'Browser disconnected');
+  recordButton.onclick=()=>mediaStream ? stopRecording() : startRecording().catch(e=>{ stopRecording(false); showError(`دسترسی میکروفن ممکن نشد: ${e.message}`); });
   $('composer').onsubmit=async event=>{
     event.preventDefault(); if (socket?.readyState!==WebSocket.OPEN || !message.value.trim()) return;
     await prepareAudio(); showError(''); socket.send(JSON.stringify({type:'message',message:message.value.trim()})); log(`SEND: ${message.value.trim()}`);

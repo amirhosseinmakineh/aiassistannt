@@ -14,6 +14,8 @@ dotnet run --project AiCall
 
 Open `https://localhost:7250`, click **اتصال**, and send the pre-filled `سلام از مرورگر` message. Configuration for the `gpt-realtime-2.1` model, endpoint, voice, instructions, and output sample rate is in `AiCall/appsettings.json`.
 
+To speak instead of typing, click **شروع صحبت**, allow microphone access, speak in Persian, and click **پایان صحبت و ارسال**. The browser resamples microphone input to mono PCM16 at 24 kHz and streams binary frames to the backend. The backend commits the audio to OpenAI and displays the resulting input transcription before the assistant response.
+
 ## Browser protocol
 
 Browser to backend:
@@ -23,3 +25,9 @@ Browser to backend:
 ```
 
 Backend to browser text frames are `status`, `error`, or `transcript.delta` objects. Audio is sent only as binary PCM16 frames; it is never wrapped in JSON.
+
+Microphone audio uses binary browser-to-backend frames followed by:
+
+```json
+{ "type": "audio.commit" }
+```

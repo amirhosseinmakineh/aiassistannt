@@ -49,9 +49,13 @@
     const line=document.createElement('div'); line.textContent=`${new Date().toLocaleTimeString()}  ${text}`;
     events.append(line); events.scrollTop=events.scrollHeight;
   }
-  function setLive(live) {
-    state.dataset.live=String(live); state.textContent=live ? 'WebSocket Connected' : 'قطع';
-    connectButton.disabled=live; disconnectButton.disabled=!live; sendButton.disabled=!live;
+  function setConnectionState(connectionState) {
+    const live=connectionState==='connected', connecting=connectionState==='connecting';
+    state.dataset.live=String(live);
+    state.textContent=live ? 'WebSocket Connected' : connecting ? 'در حال اتصال…' : 'قطع';
+    connectButton.disabled=live || connecting;
+    disconnectButton.disabled=!live;
+    sendButton.disabled=!live;
   }
   function showError(text) { error.textContent=text; error.classList.toggle('visible', Boolean(text)); }
   async function prepareAudio() {
@@ -78,14 +82,21 @@
     } else if (event.type==='error') { showError(event.message || 'خطای ناشناخته'); log(`ERROR: ${event.message}`); }
   }
   async function connect() {
+    if (socket && (socket.readyState===WebSocket.CONNECTING || socket.readyState===WebSocket.OPEN)) return;
     showError(''); await prepareAudio();
     const protocol=location.protocol==='https:' ? 'wss:' : 'ws:';
-    socket=new WebSocket(`${protocol}//${location.host}/api/dental-realtime/connect`); socket.binaryType='arraybuffer';
-    socket.onopen=()=>{ setLive(true); log('WebSocket Connected'); };
-    socket.onmessage=event=> event.data instanceof ArrayBuffer
+    const currentSocket=new WebSocket(`${protocol}//${location.host}/api/dental-realtime/connect`);
+    socket=currentSocket; currentSocket.binaryType='arraybuffer'; setConnectionState('connecting');
+    currentSocket.onopen=()=>{ setConnectionState('connected'); log('WebSocket Connected'); };
+    currentSocket.onmessage=event=> event.data instanceof ArrayBuffer
       ? playPcm16(event.data).catch(e=>showError(`خطای پخش صدا: ${e.message}`)) : handleJson(event.data);
-    socket.onerror=()=>showError('اتصال WebSocket ناموفق بود.');
-    socket.onclose=event=>{ setLive(false); log(`WebSocket closed (${event.code})`); socket=null; nextStartTime=0; };
+    currentSocket.onerror=()=>showError('اتصال WebSocket ناموفق بود. برنامه را از آدرس ASP.NET Core باز کنید و تنظیمات OpenAI را بررسی کنید.');
+    currentSocket.onclose=event=>{
+      if (socket!==currentSocket) return;
+      setConnectionState('disconnected');
+      const detail=event.reason ? `: ${event.reason}` : '';
+      log(`WebSocket closed (${event.code})${detail}`); socket=null; nextStartTime=0;
+    };
   }
   connectButton.onclick=()=>connect().catch(e=>showError(e.message));
   disconnectButton.onclick=()=>socket?.close(1000,'Browser disconnected');

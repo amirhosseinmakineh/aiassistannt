@@ -1,0 +1,2 @@
+D:\DentalDashboard\ai\AiCall\AiCall\wwwroot\index.html
+wwwroot\index.html

@@ -1,0 +1,15 @@
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\AiAssistant.ApplicationService.csproj.AssemblyReference.cache
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\AiAssistant.ApplicationService.GeneratedMSBuildEditorConfig.editorconfig
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\AiAssistant.ApplicationService.AssemblyInfoInputs.cache
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\AiAssistant.ApplicationService.AssemblyInfo.cs
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\AiAssistant.ApplicationService.csproj.CoreCompileInputs.cache
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\bin\Debug\net10.0\AiAssistant.ApplicationService.deps.json
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\bin\Debug\net10.0\AiAssistant.ApplicationService.dll
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\bin\Debug\net10.0\AiAssistant.ApplicationService.pdb
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\bin\Debug\net10.0\AiAssistant.ApplicationService.Contract.dll
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\bin\Debug\net10.0\AiAssistant.ApplicationService.Contract.pdb
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\AiAssist.7B0293B3.Up2Date
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\AiAssistant.ApplicationService.dll
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\refint\AiAssistant.ApplicationService.dll
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\AiAssistant.ApplicationService.pdb
+D:\DentalDashboard\ai\AiCall\AiAssistant.ApplicationService\obj\Debug\net10.0\ref\AiAssistant.ApplicationService.dll

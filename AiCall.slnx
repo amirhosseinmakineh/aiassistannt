@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="AiAssistant.ApplicationService.Contract/AiAssistant.ApplicationService.Contract.csproj" Id="0452c1af-5a92-4de2-be8d-c6dd4a8c53b4" />
+  <Project Path="AiAssistant.ApplicationService/AiAssistant.ApplicationService.csproj" Id="c7b87fc0-7b93-4827-90a9-ca71c52a535b" />
+  <Project Path="AiCall/AiCall.csproj" />
+</Solution>

@@ -1,0 +1,756 @@
+﻿<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Dental Realtime Assistant</title>
+
+    <style>
+        body {
+            font-family: Tahoma, Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f3f4f6;
+        }
+
+        .container {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        .status {
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            background: #eeeeee;
+        }
+
+        .connected {
+            background: #dcfce7;
+        }
+
+        .disconnected {
+            background: #fee2e2;
+        }
+
+        label {
+            display: block;
+            margin-top: 12px;
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid #cccccc;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 16px;
+            margin: 4px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            color: white;
+        }
+
+            button:disabled {
+                cursor: not-allowed;
+                opacity: 0.55;
+            }
+
+        #connectButton {
+            background: #198754;
+        }
+
+        #sendButton {
+            background: #0d6efd;
+        }
+
+        #disconnectButton {
+            background: #dc3545;
+        }
+
+        #aiText {
+            margin-top: 20px;
+            min-height: 48px;
+            padding: 15px;
+            background: #eef2ff;
+            border-radius: 8px;
+            line-height: 1.8;
+        }
+
+        #audioStatus {
+            margin-top: 12px;
+            padding: 10px;
+            background: #f8fafc;
+            border-radius: 8px;
+            direction: ltr;
+            text-align: left;
+            font-family: Consolas, monospace;
+        }
+
+        #logs {
+            margin-top: 20px;
+            min-height: 250px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            direction: ltr;
+            text-align: left;
+            background: #111827;
+            color: #e5e7eb;
+            border-radius: 8px;
+            font-family: Consolas, monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>Dental Realtime Assistant</h2>
+
+        <div id="status"
+             class="status disconnected">
+            وضعیت: قطع
+        </div>
+
+        <label for="socketUrl">
+            آدرس WebSocket:
+        </label>
+
+        <input id="socketUrl"
+               type="text"
+               value="wss://localhost:7250/api/dental-realtime/connect">
+
+        <div>
+            <button id="connectButton"
+                    type="button">
+                اتصال
+            </button>
+
+            <button id="disconnectButton"
+                    type="button"
+                    disabled>
+                قطع اتصال
+            </button>
+        </div>
+
+        <hr>
+
+        <label for="messageInput">
+            پیام آزمایشی:
+        </label>
+
+        <input id="messageInput"
+               type="text"
+               value="سلام از مرورگر"
+               placeholder="پیام خود را وارد کنید">
+
+        <button id="sendButton"
+                type="button"
+                disabled>
+            ارسال پیام
+        </button>
+
+        <div id="aiText">
+            AI:
+        </div>
+
+        <div id="audioStatus">
+            Audio: not initialized
+        </div>
+
+        <div id="logs">
+            صفحه آماده است.
+        </div>
+    </div>
+
+    <script>
+        "use strict";
+
+        const PCM_SAMPLE_RATE = 24000;
+
+        let socket = null;
+        let audioContext = null;
+
+        /*
+         * زمان شروع Chunk بعدی.
+         * با این متغیر Chunkهای صوتی پشت سر هم پخش می‌شوند
+         * و روی یکدیگر نمی‌افتند.
+         */
+        let nextAudioStartTime = 0;
+
+        let receivedAudioChunks = 0;
+        let aiTranscriptBuffer = "";
+
+        const socketUrlInput =
+            document.getElementById("socketUrl");
+
+        const messageInput =
+            document.getElementById("messageInput");
+
+        const connectButton =
+            document.getElementById("connectButton");
+
+        const disconnectButton =
+            document.getElementById("disconnectButton");
+
+        const sendButton =
+            document.getElementById("sendButton");
+
+        const statusElement =
+            document.getElementById("status");
+
+        const logsElement =
+            document.getElementById("logs");
+
+        const aiTextElement =
+            document.getElementById("aiText");
+
+        const audioStatusElement =
+            document.getElementById("audioStatus");
+
+        function addLog(message) {
+            const time =
+                new Date().toLocaleTimeString();
+
+            logsElement.textContent +=
+                `\n[${time}] ${message}`;
+
+            logsElement.scrollTop =
+                logsElement.scrollHeight;
+        }
+
+        function setConnectedState(isConnected) {
+            if (isConnected) {
+                statusElement.textContent =
+                    "وضعیت: متصل";
+
+                statusElement.className =
+                    "status connected";
+
+                connectButton.disabled = true;
+                disconnectButton.disabled = false;
+                sendButton.disabled = false;
+
+                return;
+            }
+
+            statusElement.textContent =
+                "وضعیت: قطع";
+
+            statusElement.className =
+                "status disconnected";
+
+            connectButton.disabled = false;
+            disconnectButton.disabled = true;
+            sendButton.disabled = true;
+        }
+
+        async function initializeAudio() {
+            const AudioContextClass =
+                window.AudioContext ||
+                window.webkitAudioContext;
+
+            if (!AudioContextClass) {
+                throw new Error(
+                    "Web Audio API در این مرورگر پشتیبانی نمی‌شود."
+                );
+            }
+
+            if (!audioContext) {
+                audioContext =
+                    new AudioContextClass({
+                        sampleRate: PCM_SAMPLE_RATE
+                    });
+
+                nextAudioStartTime =
+                    audioContext.currentTime;
+            }
+
+            if (audioContext.state === "suspended") {
+                await audioContext.resume();
+            }
+
+            audioStatusElement.textContent =
+                `Audio: ${audioContext.state} | ` +
+                `Context rate: ${audioContext.sampleRate} Hz`;
+
+            return audioContext;
+        }
+
+        async function connectWebSocket() {
+            const socketUrl =
+                socketUrlInput.value.trim();
+
+            if (!socketUrl) {
+                addLog(
+                    "آدرس WebSocket وارد نشده است."
+                );
+
+                return;
+            }
+
+            if (
+                socket &&
+                (
+                    socket.readyState === WebSocket.OPEN ||
+                    socket.readyState === WebSocket.CONNECTING
+                )
+            ) {
+                addLog(
+                    "اتصال در حال برقراری است یا از قبل برقرار شده."
+                );
+
+                return;
+            }
+
+            /*
+             * ایجاد AudioContext با کلیک کاربر،
+             * برای عبور از محدودیت autoplay مرورگر.
+             */
+            try {
+                await initializeAudio();
+            } catch (error) {
+                addLog(
+                    `خطای آماده‌سازی صدا: ${error.message}`
+                );
+            }
+
+            addLog(
+                `در حال اتصال به ${socketUrl}`
+            );
+
+            try {
+                socket =
+                    new WebSocket(socketUrl);
+            } catch (error) {
+                addLog(
+                    `خطا در ساخت WebSocket: ${error.message}`
+                );
+
+                socket = null;
+                return;
+            }
+
+            socket.onopen = function () {
+                addLog(
+                    "WebSocket با موفقیت متصل شد."
+                );
+
+                setConnectedState(true);
+            };
+
+            socket.onmessage = async function (event) {
+                await handleSocketMessage(event);
+            };
+
+            socket.onerror = function () {
+                addLog(
+                    "خطای WebSocket رخ داد. لاگ بک‌اند را بررسی کن."
+                );
+            };
+
+            socket.onclose = function (event) {
+                addLog(
+                    `اتصال بسته شد | Code: ${event.code} | ` +
+                    `Reason: ${event.reason || "بدون توضیح"}`
+                );
+
+                setConnectedState(false);
+
+                socket = null;
+                resetAudioPlayback();
+            };
+        }
+
+        async function handleSocketMessage(event) {
+            if (typeof event.data !== "string") {
+                addLog(
+                    `Binary frame دریافت شد: ${event.data.size ?? 0} bytes`
+                );
+
+                return;
+            }
+
+            let envelope;
+
+            try {
+                envelope =
+                    JSON.parse(event.data);
+            } catch (error) {
+                addLog(
+                    `پیام غیر JSON از سرور: ${event.data}`
+                );
+
+                return;
+            }
+
+            if (envelope.type === "audio") {
+                if (
+                    typeof envelope.data !== "string" ||
+                    envelope.data.length === 0
+                ) {
+                    addLog(
+                        "Audio message بدون data دریافت شد."
+                    );
+
+                    return;
+                }
+
+                receivedAudioChunks++;
+
+                audioStatusElement.textContent =
+                    `Audio: ${audioContext?.state ?? "unknown"} | ` +
+                    `Chunks: ${receivedAudioChunks} | ` +
+                    `Last Base64 size: ${envelope.data.length}`;
+
+                try {
+                    await schedulePcmAudio(envelope.data);
+                } catch (error) {
+                    addLog(
+                        `خطای پخش Audio: ${error.message}`
+                    );
+
+                    console.error(
+                        "Audio playback error:",
+                        error
+                    );
+                }
+
+                return;
+            }
+
+            if (envelope.type === "event") {
+                await handleOpenAiEnvelope(envelope.data);
+                return;
+            }
+
+            addLog(
+                `پیام ناشناخته سرور: ${event.data}`
+            );
+        }
+
+        async function handleOpenAiEnvelope(data) {
+            let openAiEvent;
+
+            try {
+                openAiEvent =
+                    typeof data === "string"
+                        ? JSON.parse(data)
+                        : data;
+            } catch (error) {
+                addLog(
+                    "ساختار Event دریافتی معتبر نیست."
+                );
+
+                return;
+            }
+
+            switch (openAiEvent.type) {
+                case "session.created":
+                    addLog(
+                        "OpenAI session created"
+                    );
+                    break;
+
+                case "session.updated":
+                    addLog(
+                        "OpenAI session updated"
+                    );
+                    break;
+
+                case "response.created":
+                    aiTranscriptBuffer = "";
+                    aiTextElement.textContent = "AI: ";
+                    addLog(
+                        "AI response started"
+                    );
+                    break;
+
+                case "response.output_audio_transcript.delta":
+                    aiTranscriptBuffer +=
+                        openAiEvent.delta ?? "";
+
+                    aiTextElement.textContent =
+                        `AI: ${aiTranscriptBuffer}`;
+
+                    break;
+
+                case "response.output_audio_transcript.done":
+                    if (openAiEvent.transcript) {
+                        aiTranscriptBuffer =
+                            openAiEvent.transcript;
+
+                        aiTextElement.textContent =
+                            `AI: ${aiTranscriptBuffer}`;
+                    }
+
+                    break;
+
+                case "response.done":
+                    addLog(
+                        "AI response completed"
+                    );
+                    break;
+
+                case "error":
+                    addLog(
+                        `OpenAI Error: ${openAiEvent.error?.message ??
+                        JSON.stringify(openAiEvent)
+                        }`
+                    );
+                    break;
+            }
+        }
+
+        async function schedulePcmAudio(base64Audio) {
+            const context =
+                await initializeAudio();
+
+            const pcm16Samples =
+                decodeBase64Pcm16(base64Audio);
+
+            if (pcm16Samples.length === 0) {
+                return;
+            }
+
+            const audioBuffer =
+                context.createBuffer(
+                    1,
+                    pcm16Samples.length,
+                    PCM_SAMPLE_RATE
+                );
+
+            const outputChannel =
+                audioBuffer.getChannelData(0);
+
+            for (
+                let index = 0;
+                index < pcm16Samples.length;
+                index++
+            ) {
+                /*
+                 * تبدیل PCM16 signed به Float32
+                 * در بازه تقریبی -1 تا +1.
+                 */
+                const sample =
+                    pcm16Samples[index];
+
+                outputChannel[index] =
+                    sample < 0
+                        ? sample / 32768
+                        : sample / 32767;
+            }
+
+            const source =
+                context.createBufferSource();
+
+            source.buffer =
+                audioBuffer;
+
+            source.connect(
+                context.destination
+            );
+
+            /*
+             * اگر Player عقب افتاده باشد، از زمان فعلی شروع کن.
+             * در غیر این صورت، ادامه Chunk قبلی زمان‌بندی می‌شود.
+             */
+            const startTime =
+                Math.max(
+                    context.currentTime + 0.03,
+                    nextAudioStartTime
+                );
+
+            source.start(startTime);
+
+            nextAudioStartTime =
+                startTime + audioBuffer.duration;
+        }
+
+        function decodeBase64Pcm16(base64Audio) {
+            const binaryString =
+                window.atob(base64Audio);
+
+            /*
+             * PCM16 باید تعداد بایت زوج داشته باشد.
+             */
+            const validByteLength =
+                binaryString.length -
+                (binaryString.length % 2);
+
+            const arrayBuffer =
+                new ArrayBuffer(validByteLength);
+
+            const byteView =
+                new Uint8Array(arrayBuffer);
+
+            for (
+                let index = 0;
+                index < validByteLength;
+                index++
+            ) {
+                byteView[index] =
+                    binaryString.charCodeAt(index);
+            }
+
+            /*
+             * روی سیستم‌های رایج مرورگر، Int16Array
+             * PCM little-endian را درست تفسیر می‌کند.
+             */
+            return new Int16Array(arrayBuffer);
+        }
+
+        async function sendMessage() {
+            if (
+                !socket ||
+                socket.readyState !== WebSocket.OPEN
+            ) {
+                addLog(
+                    "WebSocket متصل نیست."
+                );
+
+                return;
+            }
+
+            const message =
+                messageInput.value.trim();
+
+            if (!message) {
+                addLog(
+                    "پیام خالی است."
+                );
+
+                return;
+            }
+
+            try {
+                await initializeAudio();
+            } catch (error) {
+                addLog(
+                    `AudioContext فعال نشد: ${error.message}`
+                );
+            }
+
+            /*
+             * پاسخ جدید؛ صف صوت قبلی را از زمان جاری ادامه می‌دهیم.
+             */
+            if (
+                audioContext &&
+                nextAudioStartTime <
+                audioContext.currentTime
+            ) {
+                nextAudioStartTime =
+                    audioContext.currentTime;
+            }
+
+            const payload = {
+                type: "test.message",
+                message: message,
+                sentAt: new Date().toISOString()
+            };
+
+            socket.send(
+                JSON.stringify(payload)
+            );
+
+            addLog(
+                `SEND: ${message}`
+            );
+        }
+
+        function resetAudioPlayback() {
+            receivedAudioChunks = 0;
+            nextAudioStartTime = 0;
+            aiTranscriptBuffer = "";
+
+            aiTextElement.textContent =
+                "AI:";
+
+            audioStatusElement.textContent =
+                audioContext
+                    ? `Audio: ${audioContext.state}`
+                    : "Audio: not initialized";
+        }
+
+        function disconnectWebSocket() {
+            if (!socket) {
+                addLog(
+                    "اتصالی برای قطع کردن وجود ندارد."
+                );
+
+                return;
+            }
+
+            if (
+                socket.readyState === WebSocket.OPEN ||
+                socket.readyState === WebSocket.CONNECTING
+            ) {
+                addLog(
+                    "در حال قطع اتصال..."
+                );
+
+                socket.close(
+                    1000,
+                    "Closed by browser"
+                );
+            }
+        }
+
+        connectButton.addEventListener(
+            "click",
+            connectWebSocket
+        );
+
+        sendButton.addEventListener(
+            "click",
+            sendMessage
+        );
+
+        disconnectButton.addEventListener(
+            "click",
+            disconnectWebSocket
+        );
+
+        messageInput.addEventListener(
+            "keydown",
+            function (event) {
+                if (
+                    event.key === "Enter" &&
+                    !event.repeat
+                ) {
+                    sendMessage();
+                }
+            }
+        );
+
+        window.addEventListener(
+            "beforeunload",
+            function () {
+                if (
+                    socket &&
+                    socket.readyState === WebSocket.OPEN
+                ) {
+                    socket.close(
+                        1000,
+                        "Page closed"
+                    );
+                }
+            }
+        );
+    </script>
+</body>
+</html>

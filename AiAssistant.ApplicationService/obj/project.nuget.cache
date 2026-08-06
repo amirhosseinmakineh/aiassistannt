@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "niUhNCa5wO8=",
+  "success": true,
+  "projectFilePath": "D:\\DentalDashboard\\ai\\AiCall\\AiAssistant.ApplicationService\\AiAssistant.ApplicationService.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\asus\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\10.0.10\\microsoft.extensions.dependencyinjection.abstractions.10.0.10.nupkg.sha512",
+    "C:\\Users\\asus\\.nuget\\packages\\microsoft.extensions.options\\10.0.10\\microsoft.extensions.options.10.0.10.nupkg.sha512",
+    "C:\\Users\\asus\\.nuget\\packages\\microsoft.extensions.primitives\\10.0.10\\microsoft.extensions.primitives.10.0.10.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -24,7 +24,7 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.Configure<AiAssistant.ApplicationService.Contract.Options.OpenAiRealtimeOptions>(
     builder.Configuration.GetSection("OpenAi"));
-builder.Services.AddScoped<IOpernAiService, OpenAiService>();
+builder.Services.AddSingleton<IOpenAiRealtimeSessionFactory, OpenAiRealtimeSessionFactory>();
 
 
 var app = builder.Build();

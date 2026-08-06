@@ -12,7 +12,7 @@ public sealed class DentalRealtimeController(
     IOpenAiRealtimeSessionFactory sessionFactory,
     ILogger<DentalRealtimeController> logger) : ControllerBase
 {
-    [HttpGet("connect")]
+    [Route("connect")]
     [ApiExplorerSettings(IgnoreApi = true)]
     public async Task Connect(CancellationToken requestAborted)
     {

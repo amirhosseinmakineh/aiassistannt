@@ -24,24 +24,27 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.Configure<AiAssistant.ApplicationService.Contract.Options.OpenAiRealtimeOptions>(
     builder.Configuration.GetSection("OpenAi"));
-builder.Services.AddScoped<IOpernAiService, OpenAiService>();
+builder.Services.AddSingleton<IOpenAiRealtimeSessionFactory, OpenAiRealtimeSessionFactory>();
 
 
 var app = builder.Build();
-
-
-// HTTPS
-app.UseHttpsRedirection();
-
-
-// اجازه خواندن wwwroot/index.html
-app.UseStaticFiles();
 
 
 app.UseWebSockets(new WebSocketOptions
 {
     KeepAliveInterval = TimeSpan.FromSeconds(30)
 });
+
+// WebSocket clients do not follow HTTP 307 redirects. Let upgrade requests reach
+// the controller on both configured development URLs, while redirecting normal
+// HTTP page/API traffic to HTTPS.
+app.UseWhen(
+    context => !context.WebSockets.IsWebSocketRequest,
+    branch => branch.UseHttpsRedirection());
+
+
+// اجازه خواندن wwwroot/index.html
+app.UseStaticFiles();
 
 
 // Routing

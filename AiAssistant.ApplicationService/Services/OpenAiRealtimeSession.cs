@@ -17,6 +17,7 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
     private Task? _receiveTask;
+    private readonly TaskCompletionSource _sessionReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _responseInProgress;
     private int _disposed;
 
@@ -55,6 +56,32 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
         _receiveTask = ReceiveLoopAsync(linked);
         await SendSessionUpdateAsync(cancellationToken);
         _logger.LogInformation("Session update sent");
+        await _sessionReady.Task.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
+    }
+
+    public async Task<bool> StartGreetingAsync(CancellationToken cancellationToken)
+    {
+        if (Interlocked.CompareExchange(ref _responseInProgress, 1, 0) != 0) return false;
+        try
+        {
+            _logger.LogInformation("Requesting automatic secretary greeting");
+            await SendJsonAsync(new
+            {
+                type = "response.create",
+                response = new
+                {
+                    output_modalities = new[] { "audio" },
+                    instructions = _options.GreetingInstructions
+                }
+            }, cancellationToken);
+            await InvokeAsync(StatusReceived, "Secretary greeting requested.");
+            return true;
+        }
+        catch
+        {
+            Interlocked.Exchange(ref _responseInProgress, 0);
+            throw;
+        }
     }
 
     public async Task<bool> SendTextMessageAsync(string text, CancellationToken cancellationToken)
@@ -223,6 +250,7 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
                 await InvokeAsync(StatusReceived, "OpenAI session created.");
                 break;
             case "session.updated":
+                _sessionReady.TrySetResult();
                 await InvokeAsync(StatusReceived, "OpenAI session updated; ready.");
                 break;
             case "conversation.item.added":

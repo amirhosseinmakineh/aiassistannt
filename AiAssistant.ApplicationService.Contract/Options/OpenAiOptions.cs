@@ -12,5 +12,6 @@
         public string Instructions { get; set; } = string.Empty;
         public int OutputSampleRate { get; set; } = 24000;
         public string InputTranscriptionModel { get; set; } = "gpt-4o-mini-transcribe";
+        public string GreetingInstructions { get; set; } = string.Empty;
     }
 }

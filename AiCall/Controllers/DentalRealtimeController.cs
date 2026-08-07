@@ -12,7 +12,7 @@ public sealed class DentalRealtimeController(
     IOpenAiRealtimeSessionFactory sessionFactory,
     ILogger<DentalRealtimeController> logger) : ControllerBase
 {
-    [Route("connect")]
+    [HttpGet("connect")]
     [ApiExplorerSettings(IgnoreApi = true)]
     public async Task Connect(CancellationToken requestAborted)
     {
@@ -47,6 +47,7 @@ public sealed class DentalRealtimeController(
             await SendJsonAsync(new { type = "status", message = "WebSocket connected; creating OpenAI session." });
             await openAi.ConnectAsync(lifetime.Token);
             logger.LogInformation("OpenAI session connected");
+            await openAi.StartGreetingAsync(lifetime.Token);
             await ReceiveBrowserMessagesAsync(browser, openAi, SendJsonAsync, logger, lifetime.Token);
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }

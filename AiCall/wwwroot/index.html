@@ -48,6 +48,7 @@
   let socket=null, audioContext=null, nextStartTime=0, transcriptText='', inputTranscriptText='';
   let mediaStream=null, microphoneSource=null, recorderNode=null, silentGain=null, recordedBytes=0;
   let recorderModulePromise=null;
+  let reconnectTimer=null, reconnectDelay=1000, manuallyDisconnected=false;
 
   function log(text) {
     const line=document.createElement('div'); line.textContent=`${new Date().toLocaleTimeString()}  ${text}`;
@@ -90,13 +91,14 @@
       inputTranscriptText=event.transcript || inputTranscriptText; inputTranscript.textContent=inputTranscriptText;
     } else if (event.type==='error') { showError(event.message || 'خطای ناشناخته'); log(`ERROR: ${event.message}`); }
   }
-  async function connect() {
+  async function connect(userInitiated=false) {
     if (socket && (socket.readyState===WebSocket.CONNECTING || socket.readyState===WebSocket.OPEN)) return;
-    showError(''); await prepareAudio();
+    manuallyDisconnected=false; clearTimeout(reconnectTimer); showError('');
+    if (userInitiated) await prepareAudio();
     const protocol=location.protocol==='https:' ? 'wss:' : 'ws:';
     const currentSocket=new WebSocket(`${protocol}//${location.host}/api/dental-realtime/connect`);
     socket=currentSocket; currentSocket.binaryType='arraybuffer'; setConnectionState('connecting');
-    currentSocket.onopen=()=>{ setConnectionState('connected'); log('WebSocket Connected'); };
+    currentSocket.onopen=()=>{ reconnectDelay=1000; setConnectionState('connected'); log('WebSocket Connected'); };
     currentSocket.onmessage=event=> event.data instanceof ArrayBuffer
       ? playPcm16(event.data).catch(e=>showError(`خطای پخش صدا: ${e.message}`)) : handleJson(event.data);
     currentSocket.onerror=()=>showError('اتصال WebSocket ناموفق بود. برنامه را از آدرس ASP.NET Core باز کنید و تنظیمات OpenAI را بررسی کنید.');
@@ -105,6 +107,11 @@
       setConnectionState('disconnected');
       const detail=event.reason ? `: ${event.reason}` : '';
       stopRecording(false); log(`WebSocket closed (${event.code})${detail}`); socket=null; nextStartTime=0;
+      if (!manuallyDisconnected) {
+        state.textContent=`تلاش مجدد برای اتصال تا ${Math.round(reconnectDelay/1000)} ثانیه دیگر…`;
+        reconnectTimer=setTimeout(()=>connect(),reconnectDelay);
+        reconnectDelay=Math.min(reconnectDelay*2,10000);
+      }
     };
   }
   async function startRecording() {
@@ -136,14 +143,16 @@
       else showError('صدای ضبط‌شده خیلی کوتاه بود؛ حداقل یک لحظه صحبت کنید.');
     }
   }
-  connectButton.onclick=()=>connect().catch(e=>showError(e.message));
-  disconnectButton.onclick=()=>socket?.close(1000,'Browser disconnected');
+  connectButton.onclick=()=>connect(true).catch(e=>showError(e.message));
+  disconnectButton.onclick=()=>{ manuallyDisconnected=true; clearTimeout(reconnectTimer); socket?.close(1000,'Browser disconnected'); };
   recordButton.onclick=()=>mediaStream ? stopRecording() : startRecording().catch(e=>{ stopRecording(false); showError(`دسترسی میکروفن ممکن نشد: ${e.message}`); });
   $('composer').onsubmit=async event=>{
     event.preventDefault(); if (socket?.readyState!==WebSocket.OPEN || !message.value.trim()) return;
     await prepareAudio(); showError(''); socket.send(JSON.stringify({type:'message',message:message.value.trim()})); log(`SEND: ${message.value.trim()}`);
   };
-  addEventListener('beforeunload',()=>socket?.close());
+  addEventListener('pointerdown',()=>audioContext?.resume(),{once:true});
+  addEventListener('beforeunload',()=>{ manuallyDisconnected=true; socket?.close(); });
+  connect().catch(e=>{ showError(e.message); reconnectTimer=setTimeout(()=>connect(),reconnectDelay); });
 })();
 </script>
 </body>

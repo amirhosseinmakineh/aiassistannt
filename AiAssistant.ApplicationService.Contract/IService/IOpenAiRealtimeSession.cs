@@ -10,6 +10,7 @@ public interface IOpenAiRealtimeSession : IAsyncDisposable
     event Func<string, Task>? ErrorReceived;
 
     Task ConnectAsync(CancellationToken cancellationToken);
+    Task<bool> StartGreetingAsync(CancellationToken cancellationToken);
     Task<bool> SendTextMessageAsync(string text, CancellationToken cancellationToken);
     Task SendAudioAsync(ReadOnlyMemory<byte> pcm16Audio, CancellationToken cancellationToken);
     Task<bool> CommitAudioAsync(CancellationToken cancellationToken);

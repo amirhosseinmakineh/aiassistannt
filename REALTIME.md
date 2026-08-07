@@ -14,6 +14,8 @@ dotnet run --project AiCall
 
 Open `https://localhost:7250`, click **اتصال**, and send the pre-filled `سلام از مرورگر` message. Configuration for the `gpt-realtime-2.1` model, endpoint, voice, instructions, and output sample rate is in `AiCall/appsettings.json`.
 
+The page connects automatically when it loads and retries with exponential backoff while the server is unavailable. Once the OpenAI session update is acknowledged, the assistant automatically introduces itself as the office secretary. Browsers may require one click or tap on the page before allowing greeting audio to play because of autoplay policy; transcript streaming does not require that interaction.
+
 To speak instead of typing, click **شروع صحبت**, allow microphone access, speak in Persian, and click **پایان صحبت و ارسال**. The browser resamples microphone input to mono PCM16 at 24 kHz and streams binary frames to the backend. The backend commits the audio to OpenAI and displays the resulting input transcription before the assistant response.
 
 ## Browser protocol

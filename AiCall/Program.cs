@@ -7,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // MVC Controllers
 builder.Services.AddControllers();
+builder.Services.AddAuthorization();
 
 
 // Swagger
@@ -25,6 +26,8 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.Configure<AiAssistant.ApplicationService.Contract.Options.OpenAiRealtimeOptions>(
     builder.Configuration.GetSection("OpenAi"));
 builder.Services.AddTransient<IOpenAiRealtimeSessionFactory, OpenAiRealtimeSessionFactory>();
+builder.Services.AddHttpClient<IOpenAiCustomVoiceService, OpenAiCustomVoiceService>(client =>
+    client.BaseAddress = new Uri("https://api.openai.com/v1/"));
 
 
 var app = builder.Build();
@@ -51,6 +54,7 @@ app.UseStaticFiles();
 
 // Routing
 app.UseRouting();
+app.UseAuthorization();
 
 
 // Swagger

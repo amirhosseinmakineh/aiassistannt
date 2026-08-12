@@ -173,7 +173,15 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
                 {
                     format = new { type = "audio/pcm", rate = _options.OutputSampleRate },
                     transcription = new { model = _options.InputTranscriptionModel },
-                    turn_detection = (object?)null
+                    turn_detection = new
+                    {
+                        type = "server_vad",
+                        threshold = 0.5,
+                        prefix_padding_ms = 300,
+                        silence_duration_ms = 650,
+                        create_response = true,
+                        interrupt_response = true
+                    }
                 },
                 output = new
                 {
@@ -255,6 +263,14 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
                 break;
             case "conversation.item.added":
                 await InvokeAsync(StatusReceived, "Conversation item accepted.");
+                break;
+            case "input_audio_buffer.speech_started":
+                // The Realtime API interrupts its response; tell the browser to discard audio
+                // that has already arrived but is still queued for playback.
+                await InvokeAsync(StatusReceived, "Caller speech started; clear playback.");
+                break;
+            case "input_audio_buffer.speech_stopped":
+                await InvokeAsync(StatusReceived, "Caller speech ended; preparing response.");
                 break;
             case "response.created":
                 Interlocked.Exchange(ref _responseInProgress, 1);

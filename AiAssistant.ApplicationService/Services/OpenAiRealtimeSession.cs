@@ -160,37 +160,52 @@ public sealed class OpenAiRealtimeSession : IOpenAiRealtimeSession
         }
     }
 
-    private Task SendSessionUpdateAsync(CancellationToken cancellationToken) => SendJsonAsync(new
+    private Task SendSessionUpdateAsync(CancellationToken cancellationToken)
     {
-        type = "session.update",
-        session = new
+        object voice;
+        if (!string.IsNullOrWhiteSpace(_options.CustomVoiceId))
         {
-            type = "realtime",
-            instructions = _options.Instructions,
-            audio = new
+            voice = new { id = _options.CustomVoiceId.Trim() };
+            _logger.LogInformation("Custom voice selected for realtime session");
+        }
+        else
+        {
+            voice = _options.Voice;
+            _logger.LogInformation("Built-in voice selected for realtime session");
+        }
+
+        return SendJsonAsync(new
+        {
+            type = "session.update",
+            session = new
             {
-                input = new
+                type = "realtime",
+                instructions = _options.Instructions,
+                audio = new
                 {
-                    format = new { type = "audio/pcm", rate = _options.OutputSampleRate },
-                    transcription = new { model = _options.InputTranscriptionModel },
-                    turn_detection = new
+                    input = new
                     {
-                        type = "server_vad",
-                        threshold = 0.5,
-                        prefix_padding_ms = 300,
-                        silence_duration_ms = 650,
-                        create_response = true,
-                        interrupt_response = true
+                        format = new { type = "audio/pcm", rate = _options.OutputSampleRate },
+                        transcription = new { model = _options.InputTranscriptionModel },
+                        turn_detection = new
+                        {
+                            type = "server_vad",
+                            threshold = 0.5,
+                            prefix_padding_ms = 300,
+                            silence_duration_ms = 650,
+                            create_response = true,
+                            interrupt_response = true
+                        }
+                    },
+                    output = new
+                    {
+                        format = new { type = "audio/pcm", rate = _options.OutputSampleRate },
+                        voice
                     }
-                },
-                output = new
-                {
-                    format = new { type = "audio/pcm", rate = _options.OutputSampleRate },
-                    voice = _options.Voice
                 }
             }
-        }
-    }, cancellationToken);
+        }, cancellationToken);
+    }
 
     private async Task SendJsonAsync(object payload, CancellationToken cancellationToken)
     {

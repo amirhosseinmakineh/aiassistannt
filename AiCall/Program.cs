@@ -1,9 +1,15 @@
 using AiAssistant.ApplicationService.Contract.IService;
 using AiAssistant.ApplicationService.Services;
+using AiAssistant.ApplicationService.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+builder.Services.AddDbContext<AiAssistantDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("AiAssistant")));
+builder.Services.AddScoped<IAiLeadPersistenceService, AiLeadPersistenceService>();
 
 // MVC Controllers
 builder.Services.AddControllers();
